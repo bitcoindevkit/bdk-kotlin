@@ -1,5 +1,5 @@
-*** bdkwithoutdocs.kt	2022-04-05 16:38:27.692000000 -0700
---- bdk.kt	2022-04-05 16:40:51.727000000 -0700
+*** bdkwithoutdocs.kt	2022-04-07 14:31:55.000000000 -0400
+--- bdk.kt	2022-04-07 15:39:47.000000000 -0400
 ***************
 *** 17,131 ****
   // compile the Rust component. The easiest way to ensure this is to bundle the Kotlin
@@ -568,8 +568,18 @@
   
       internal fun lower(): RustBuffer.ByValue {
 ***************
-*** 761,800 ****
---- 802,844 ----
+*** 750,860 ****
+              }
+              is DatabaseConfig.Sqlite -> {
+                  buf.putInt(3)
+                  this.config.write(buf)
+                  
+              }
+          }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+      }
+  
+      
+      
   }
   
   
@@ -579,17 +589,129 @@
   
   
   sealed class Transaction  {
-      
+!     
       data class Unconfirmed(
-          val details: TransactionDetails 
+!         val details: TransactionDetails 
           ) : Transaction()
-      
+!     
       data class Confirmed(
-          val details: TransactionDetails, 
-          val confirmation: BlockTime 
+!         val details: TransactionDetails, 
+!         val confirmation: BlockTime 
           ) : Transaction()
+-     
+  
+      companion object {
+          internal fun lift(rbuf: RustBuffer.ByValue): Transaction {
+              return liftFromRustBuffer(rbuf) { buf -> Transaction.read(buf) }
+          }
+  
+          internal fun read(buf: ByteBuffer): Transaction {
+              return when(buf.getInt()) {
+                  1 -> Transaction.Unconfirmed(
+                      TransactionDetails.read(buf)
+                      )
+                  2 -> Transaction.Confirmed(
+                      TransactionDetails.read(buf),
+                      BlockTime.read(buf)
+                      )
+                  else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+              }
+          }
+      }
+  
+      internal fun lower(): RustBuffer.ByValue {
+          return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
+      }
+  
+      internal fun write(buf: RustBufferBuilder) {
+          when(this) {
+              is Transaction.Unconfirmed -> {
+                  buf.putInt(1)
+                  this.details.write(buf)
+!                 
+              }
+              is Transaction.Confirmed -> {
+                  buf.putInt(2)
+                  this.details.write(buf)
+                  this.confirmation.write(buf)
+!                 
+              }
+          }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+      }
+  
+!     
+!     
+  }
+  
+  
+  
+  
+  
+  
+  
+  sealed class BlockchainConfig  {
+      
+      data class Electrum(
+          val config: ElectrumConfig 
+          ) : BlockchainConfig()
+      
+      data class Esplora(
+          val config: EsploraConfig 
+          ) : BlockchainConfig()
       
   
+      companion object {
+          internal fun lift(rbuf: RustBuffer.ByValue): BlockchainConfig {
+              return liftFromRustBuffer(rbuf) { buf -> BlockchainConfig.read(buf) }
+          }
+  
+          internal fun read(buf: ByteBuffer): BlockchainConfig {
+              return when(buf.getInt()) {
+                  1 -> BlockchainConfig.Electrum(
+                      ElectrumConfig.read(buf)
+                      )
+                  2 -> BlockchainConfig.Esplora(
+                      EsploraConfig.read(buf)
+                      )
+                  else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+              }
+          }
+      }
+  
+      internal fun lower(): RustBuffer.ByValue {
+          return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
+--- 791,907 ----
+              }
+              is DatabaseConfig.Sqlite -> {
+                  buf.putInt(3)
+                  this.config.write(buf)
+                  
+              }
+          }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+      }
+  
+      
+      
+  }
+  
+  
+  
+  
+  
+  
+  
+  sealed class Transaction  {
+! 
+      data class Unconfirmed(
+!         val details: TransactionDetails
+          ) : Transaction()
+! 
+      data class Confirmed(
+!         val details: TransactionDetails,
+!         val confirmation: BlockTime
+          ) : Transaction()
+  
++ 
 +     /**
 +      * @suppress
 +      */
@@ -613,10 +735,27 @@
       }
   
       internal fun lower(): RustBuffer.ByValue {
-***************
-*** 821,860 ****
---- 865,907 ----
-      
+          return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
+      }
+  
+      internal fun write(buf: RustBufferBuilder) {
+          when(this) {
+              is Transaction.Unconfirmed -> {
+                  buf.putInt(1)
+                  this.details.write(buf)
+! 
+              }
+              is Transaction.Confirmed -> {
+                  buf.putInt(2)
+                  this.details.write(buf)
+                  this.confirmation.write(buf)
+! 
+              }
+          }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+      }
+  
+! 
+! 
   }
   
   
@@ -799,7 +938,7 @@
       fun feeRate(satPerVbyte: Float ): TxBuilder
 ***************
 *** 1217,1410 ****
---- 1273,1486 ----
+--- 1273,1509 ----
           callWithPointer {
       rustCall() { status ->
       _UniFFILib.INSTANCE.bdk_9c03_TxBuilder_drain_to(it, address.lower() , status)
@@ -905,6 +1044,14 @@
       
   }
   
++ /**
++  * A wallet transaction
++  *
++  * @property[fees] Fee value (sats) if available. The availability of the fee depends on the backend. It’s never None with an Electrum Server backend, but it could be None with a Bitcoin RPC node without txindex that receive funds while offline.
++  * @property[received] Received value (sats)
++  * @property[sent] Sent value (sats)
++  * @property[txid] Transaction id
++  */
   data class TransactionDetails (
       var fees: ULong?, 
       var received: ULong, 
@@ -949,6 +1096,12 @@
       
   }
   
++ /**
++  * Block height and timestamp of a block
++  *
++  * @property[height] confirmation block height
++  * @property[timestamp] confirmation block timestamp
++  */
   data class BlockTime (
       var height: UInt, 
       var timestamp: ULong 
@@ -984,6 +1137,15 @@
       
   }
   
++ /**
++  * Configuration for a BlockchainConfig.Electrum
++  *
++  * @property[url] URL of the Electrum server (such as ElectrumX, Esplora, BWT) may start with `ssl://` or `tcp://` and include a port, e.g. `ssl://electrum.blockstream.info:60002`
++  * @property[socks5] URL of the socks5 proxy server or a Tor service
++  * @property[retry] Request retry count
++  * @property[timeout] Request timeout (seconds)
++  * @property[stopGap] Stop searching addresses for transactions after finding an unused gap of this length
++  */
   data class ElectrumConfig (
       var url: String, 
       var socks5: String?, 
@@ -1016,7 +1178,7 @@
   
 ***************
 *** 1415,1454 ****
---- 1491,1533 ----
+--- 1514,1556 ----
           
               this.retry.write(buf)
           
@@ -1062,7 +1224,7 @@
   
 ***************
 *** 1457,1496 ****
---- 1536,1578 ----
+--- 1559,1601 ----
           
               writeOptionalString(this.proxy, buf)
           
@@ -1108,7 +1270,7 @@
               this.mnemonic.write(buf)
 ***************
 *** 1535,1574 ****
---- 1617,1659 ----
+--- 1640,1682 ----
           class InvalidNetwork(message: String) : BdkException(message)
           class InvalidProgressValue(message: String) : BdkException(message)
           class ProgressUpdateException(message: String) : BdkException(message)
