@@ -1,5 +1,5 @@
 *** bdkwithoutdocs.kt	2022-04-07 14:31:55.000000000 -0400
---- bdk.kt	2022-04-07 15:39:47.000000000 -0400
+--- bdk.kt	2022-04-08 16:52:34.000000000 -0400
 ***************
 *** 17,131 ****
   // compile the Rust component. The easiest way to ensure this is to bundle the Kotlin
@@ -439,7 +439,125 @@
           }
 ***************
 *** 619,736 ****
---- 651,777 ----
+                      }
+              }
+  
+      fun get(handle: Handle) = lock.withLock {
+          leftMap[handle]
+      }
+  
+      fun delete(handle: Handle) {
+          this.remove(handle)
+      }
+  
+      fun remove(handle: Handle): T? =
+          lock.withLock {
+              leftMap.remove(handle)?.let { obj ->
+                  rightMap.remove(obj)
+                  obj
+              }
+          }
+  }
+  
+  interface ForeignCallback : com.sun.jna.Callback {
+      public fun invoke(handle: Handle, method: Int, args: RustBuffer.ByValue, outBuf: RustBufferByReference): Int
+  }
+  
+  // Magic number for the Rust proxy to call using the same mechanism as every other method,
+  // to free the callback once it's dropped by Rust.
+  internal const val IDX_CALLBACK_FREE = 0
+  
+  internal abstract class FfiConverterCallbackInterface<CallbackInterface>(
+      protected val foreignCallback: ForeignCallback
+  ) {
+      val handleMap = ConcurrentHandleMap<CallbackInterface>()
+  
+      // Registers the foreign callback with the Rust side.
+      // This method is generated for each callback interface.
+      abstract fun register(lib: _UniFFILib)
+  
+      fun drop(handle: Handle): RustBuffer.ByValue {
+          return handleMap.remove(handle).let { RustBuffer.ByValue() }
+      }
+  
+      fun lift(n: Handle) = handleMap.get(n)
+  
+      fun read(buf: ByteBuffer) = lift(buf.getLong())
+  
+      fun lower(v: CallbackInterface) =
+          handleMap.insert(v).also {
+              assert(handleMap.get(it) === v) { "Handle map is not returning the object we just placed there. This is a bug in the HandleMap." }
+          }
+  
+      fun write(v: CallbackInterface, buf: RustBufferBuilder) =
+          buf.putLong(lower(v))
+  }
+  
+  
+! 
+  enum class Network {
+!     BITCOIN,TESTNET,SIGNET,REGTEST;
+  
+      companion object {
+          internal fun lift(rbuf: RustBuffer.ByValue): Network {
+              return liftFromRustBuffer(rbuf) { buf -> Network.read(buf) }
+          }
+  
+          internal fun read(buf: ByteBuffer) =
+              try { values()[buf.getInt() - 1] }
+              catch (e: IndexOutOfBoundsException) {
+                  throw RuntimeException("invalid enum value, something is very wrong!!", e)
+              }
+      }
+  
+      internal fun lower(): RustBuffer.ByValue {
+          return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
+      }
+  
+      internal fun write(buf: RustBufferBuilder) {
+          buf.putInt(this.ordinal + 1)
+      }
+  }
+  
+  
+  
+  
+  
+  
+  
+  sealed class DatabaseConfig  {
+      object Memory : DatabaseConfig()
+      
+      data class Sled(
+          val config: SledDbConfiguration 
+          ) : DatabaseConfig()
+      
+      data class Sqlite(
+          val config: SqliteDbConfiguration 
+          ) : DatabaseConfig()
+      
+  
+      companion object {
+          internal fun lift(rbuf: RustBuffer.ByValue): DatabaseConfig {
+              return liftFromRustBuffer(rbuf) { buf -> DatabaseConfig.read(buf) }
+          }
+  
+          internal fun read(buf: ByteBuffer): DatabaseConfig {
+              return when(buf.getInt()) {
+                  1 -> DatabaseConfig.Memory
+                  2 -> DatabaseConfig.Sled(
+                      SledDbConfiguration.read(buf)
+                      )
+                  3 -> DatabaseConfig.Sqlite(
+                      SqliteDbConfiguration.read(buf)
+                      )
+                  else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+              }
+          }
+      }
+  
+      internal fun lower(): RustBuffer.ByValue {
+--- 651,794 ----
                       }
               }
   
@@ -498,9 +616,26 @@
   }
   
   
-  
+! /**
+!  * The bitcoin network to operate on
+!  */
   enum class Network {
-      BITCOIN,TESTNET,SIGNET,REGTEST;
+!     /**
+!      * Bitcoin's mainnet
+!      */
+!     BITCOIN,
+!     /**
+!      * Bitcoin's testnet
+!      */
+!     TESTNET,
+!     /**
+!      * Bitcoin's signet
+!      */
+!     SIGNET,
+!     /**
+!      * Bitcoin's regtest
+!      */
+!     REGTEST;
   
 +     /**
 +      * @suppress
@@ -680,7 +815,7 @@
   
       internal fun lower(): RustBuffer.ByValue {
           return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
---- 791,907 ----
+--- 808,924 ----
               }
               is DatabaseConfig.Sqlite -> {
                   buf.putInt(3)
@@ -799,8 +934,11 @@
       internal fun lower(): RustBuffer.ByValue {
           return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
 ***************
-*** 869,908 ****
---- 916,958 ----
+*** 865,908 ****
+              is BlockchainConfig.Electrum -> {
+                  buf.putInt(1)
+                  this.config.write(buf)
+                  
               }
               is BlockchainConfig.Esplora -> {
                   buf.putInt(2)
@@ -817,9 +955,75 @@
   
   
   
-  
+! 
   enum class WordCount {
-      WORDS12,WORDS15,WORDS18,WORDS21,WORDS24;
+!     WORDS12,WORDS15,WORDS18,WORDS21,WORDS24;
+  
+      companion object {
+          internal fun lift(rbuf: RustBuffer.ByValue): WordCount {
+              return liftFromRustBuffer(rbuf) { buf -> WordCount.read(buf) }
+          }
+  
+          internal fun read(buf: ByteBuffer) =
+              try { values()[buf.getInt() - 1] }
+              catch (e: IndexOutOfBoundsException) {
+                  throw RuntimeException("invalid enum value, something is very wrong!!", e)
+              }
+      }
+  
+      internal fun lower(): RustBuffer.ByValue {
+          return lowerIntoRustBuffer(this, {v, buf -> v.write(buf)})
+      }
+  
+      internal fun write(buf: RustBufferBuilder) {
+          buf.putInt(this.ordinal + 1)
+      }
+  }
+--- 929,996 ----
+              is BlockchainConfig.Electrum -> {
+                  buf.putInt(1)
+                  this.config.write(buf)
+                  
+              }
+              is BlockchainConfig.Esplora -> {
+                  buf.putInt(2)
+                  this.config.write(buf)
+                  
+              }
+          }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+      }
+  
+      
+      
+  }
+  
+  
+  
+  
+! /**
+!  * Type describing entropy length (aka word count) in the mnemonic
+!  */
+  enum class WordCount {
+!     /**
+!      * 12 words mnemonic (128 bits entropy)
+!      */
+!     WORDS12,
+!     /**
+!      * 15 words mnemonic (160 bits entropy)
+!      */
+!     WORDS15,
+!     /**
+!      * 18 words mnemonic (192 bits entropy)
+!      */
+!     WORDS18,
+!     /**
+!      * 21 words mnemonic (224 bits entropy)
+!      */
+!     WORDS21,
+!     /**
+!      * 24 words mnemonic (256 bits entropy)
+!      */
+!     WORDS24;
   
 +     /**
 +      * @suppress
@@ -846,7 +1050,7 @@
   }
 ***************
 *** 1045,1084 ****
---- 1095,1137 ----
+--- 1133,1175 ----
       
       @Throws(BdkException::class)override fun sync(progressUpdate: BdkProgress, maxAddressParam: UInt? ) =
           callWithPointer {
@@ -892,7 +1096,7 @@
   }
 ***************
 *** 1108,1147 ****
---- 1161,1203 ----
+--- 1199,1241 ----
   
       internal fun lower(): Pointer = callWithPointer { it }
   
@@ -938,7 +1142,7 @@
       fun feeRate(satPerVbyte: Float ): TxBuilder
 ***************
 *** 1217,1410 ****
---- 1273,1509 ----
+--- 1311,1547 ----
           callWithPointer {
       rustCall() { status ->
       _UniFFILib.INSTANCE.bdk_9c03_TxBuilder_drain_to(it, address.lower() , status)
@@ -1178,7 +1382,7 @@
   
 ***************
 *** 1415,1454 ****
---- 1514,1556 ----
+--- 1552,1594 ----
           
               this.retry.write(buf)
           
@@ -1224,7 +1428,7 @@
   
 ***************
 *** 1457,1496 ****
---- 1559,1601 ----
+--- 1597,1639 ----
           
               writeOptionalString(this.proxy, buf)
           
@@ -1270,7 +1474,7 @@
               this.mnemonic.write(buf)
 ***************
 *** 1535,1574 ****
---- 1640,1682 ----
+--- 1678,1720 ----
           class InvalidNetwork(message: String) : BdkException(message)
           class InvalidProgressValue(message: String) : BdkException(message)
           class ProgressUpdateException(message: String) : BdkException(message)
