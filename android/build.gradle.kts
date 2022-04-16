@@ -44,7 +44,7 @@ afterEvaluate {
             create<MavenPublication>("maven") {
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-android"
-                version = "0.5.1"
+                version = "0.5.2"
                 from(components["release"])
                 pom {
                     name.set("bdk-android")
