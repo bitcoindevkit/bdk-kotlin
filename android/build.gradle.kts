@@ -17,8 +17,6 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 31
-        // versionCode = 1
-        // versionName = "v0.2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
@@ -57,7 +55,7 @@ afterEvaluate {
             create<MavenPublication>("maven") {
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-android"
-                version = "0.7.0-SNAPSHOT"
+                version = "0.7.0"
                 from(components["release"])
                 pom {
                     name.set("bdk-android")
@@ -105,7 +103,7 @@ tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
     dokkaSourceSets {
         named("main") {
             moduleName.set("bdk-android")
-            moduleVersion.set("0.7.0-SNAPSHOT")
+            moduleVersion.set("0.7.0")
             includes.from("Module.md")
         }
     }
