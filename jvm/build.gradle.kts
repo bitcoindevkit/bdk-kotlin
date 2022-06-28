@@ -51,7 +51,7 @@ afterEvaluate {
 
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-jvm"
-                version = "0.7.0"
+                version = "0.7.1"
 
                 from(components["java"])
 
@@ -101,7 +101,7 @@ tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
     dokkaSourceSets {
         named("main") {
             moduleName.set("bdk-jvm")
-            moduleVersion.set("0.7.0")
+            moduleVersion.set("0.7.1")
             includes.from("Module.md")
         }
     }

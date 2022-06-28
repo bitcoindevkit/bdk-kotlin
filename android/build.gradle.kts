@@ -55,7 +55,7 @@ afterEvaluate {
             create<MavenPublication>("maven") {
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-android"
-                version = "0.7.0"
+                version = "0.7.1"
                 from(components["release"])
                 pom {
                     name.set("bdk-android")
@@ -103,7 +103,7 @@ tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
     dokkaSourceSets {
         named("main") {
             moduleName.set("bdk-android")
-            moduleVersion.set("0.7.0")
+            moduleVersion.set("0.7.1")
             includes.from("Module.md")
         }
     }
