@@ -51,7 +51,7 @@ afterEvaluate {
 
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-jvm"
-                version = "0.8.0"
+                version = "0.8.1"
 
                 from(components["java"])
 
