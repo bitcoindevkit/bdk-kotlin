@@ -58,6 +58,7 @@ afterEvaluate {
                 groupId = "org.bitcoindevkit"
                 artifactId = "bdk-android"
                 version = "0.10.0"
+
                 from(components["release"])
                 pom {
                     name.set("bdk-android")
