@@ -1,5 +1,11 @@
 # bdk-kotlin
 
+⚠️⚠️ The code in this repository has been moved to [bdk-ffi](https://github.com/bitcoindevkit/bdk-ffi), and development is continuing there. This repository is now considered an archive, and will not accept new pull requests or issues. ⚠️⚠️
+
+<br/>
+<br/>
+<br/>
+
 This project builds .jar and .aar packages for the `jvm` and `android` platforms that provide 
 [Kotlin] language bindings for the [`bdk`] library. The Kotlin language bindings are created by the 
 [`bdk-ffi`] project which is included as a git submodule of this repository.
